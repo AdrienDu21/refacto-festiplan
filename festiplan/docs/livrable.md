@@ -167,6 +167,40 @@ Suite complète (`pytest -q`) : **142 passed**.
 | API / intégration | `tests/test_api_endpoints.py` et tests historiques | 26 | Routes HTTP, codes de retour, persistance de bout en bout | FastAPI, SQLite |
 | Non-régression | `tests/test_regression.py` | 5 | Les 3 défauts initiaux | FastAPI, SQLite |
 
+### Rejeu des scénarios sur le code corrigé
+
+Les scénarios de la section 2 ont été rejoués, avec les mêmes données (`python -m app.seed`) et les mêmes requêtes, sur l'application refactorisée.
+
+| Défaut | Requête | Avant | Après |
+|---|---|---|---|
+| 1a (R2) | `PATCH /concerts/2/reschedule` 18:30–19:30 | `200`, chevauchement enregistré | `400` « Conflit : la scène est déjà occupée », concert 2 inchangé (19:30–20:30) |
+| 1b (R3) | `PATCH /concerts/15/reschedule` 17:15–17:30 | `200`, artiste sur deux scènes | `400` « Conflit : l'artiste est déjà programmé », concert 15 inchangé (21:30–22:30) |
+| 2 | `PATCH /concerts/4/reschedule` 16:00–16:45, `FESTIPLAN_FAIL_NOTIFICATIONS=true` | `500`, alors que la modification est enregistrée | `200`, concert 4 à 16:00–16:45, l'échec de notification est journalisé |
+| 3 (R7) | `POST /festivals/1/publish` puis `PATCH /concerts/4/reschedule` 16:00–16:45 | `200`, planning publié modifié | `409` « Le planning est publié : dépubliez-le avant de le modifier », concert 4 inchangé (17:00–17:45) |
+| 3 (suite) | `POST /festivals/1/unpublish` puis le même `PATCH` | — | `200`, modification acceptée |
+
+Réponse du défaut 2 (notification en panne) :
+
+```json
+HTTP 200
+{"id": 4, "festival_id": 1, "artist_id": 4, "stage_id": 2,
+ "start_time": "2027-06-18T16:00:00", "end_time": "2027-06-18T16:45:00", "status": "scheduled"}
+```
+
+Journal serveur au même moment (l'erreur est tracée, pas propagée) :
+
+```
+Échec de la notification pour l'événement ConcertRescheduled(concert_id=4, ...)
+RuntimeError: Simulation : le service de notification est indisponible
+```
+
+Réponse du défaut 3 (planning publié) :
+
+```json
+HTTP 409
+{"detail": "Le planning est publié : dépubliez-le avant de le modifier"}
+```
+
 ## 4. Diagnostic de l'architecture initiale
 
 ### 4.1 Responsabilités actuelles
