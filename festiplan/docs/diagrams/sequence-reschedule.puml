@@ -1,0 +1,37 @@
+@startuml sequence-reschedule
+actor Client
+participant "Route PATCH reschedule\n(adaptateur HTTP)" as Route
+participant "RescheduleConcert\n(cas d'usage)" as UC
+participant "Repositories\n(port, impl. SQL)" as Repo
+participant SchedulingPolicy as Policy
+participant "Concert\n(domaine)" as Concert
+participant "NotificationPort\n(impl. email)" as Notif
+
+Client -> Route : PATCH /concerts/{id}/reschedule
+Route -> UC : execute(RescheduleConcertCommand)
+UC -> Repo : get concert, festival, scène, artiste
+alt concert introuvable
+  UC --> Route : EntityNotFound
+  Route --> Client : 404
+end
+UC -> UC : TimeSlot(début, fin)  [R1]
+UC -> Policy : check(festival, scène, artiste, créneau,\nconcerts, exclure ce concert)
+alt planning publié [R7]
+  Policy --> Route : PlanningLocked
+  Route --> Client : 409
+else conflit de scène, d'artiste, équipement ou période [R2 à R6]
+  Policy --> Route : erreur de domaine
+  Route --> Client : 400
+end
+UC -> Concert : reschedule(nouveau créneau)
+Concert --> UC : événement ConcertRescheduled
+UC -> Repo : save(concert) + commit
+note over UC, Repo : La modification est enregistrée ici
+UC -> Notif : notify(ConcertRescheduled)
+alt notification en échec
+  Notif --> UC : exception
+  note over UC : erreur journalisée, puis ignorée
+end
+UC --> Route : concert déplacé
+Route --> Client : 200 + concert
+@enduml

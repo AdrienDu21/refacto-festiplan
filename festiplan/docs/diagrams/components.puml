@@ -1,0 +1,46 @@
+@startuml components
+skinparam componentStyle uml2
+left to right direction
+
+actor "Client HTTP" as Client
+
+package "Adaptateur entrant" {
+  component "Routeurs FastAPI\n+ schémas Pydantic" as Routers
+  component "Traduction des erreurs\nen codes HTTP" as Handlers
+}
+
+component "composition.py\n(assemblage des dépendances)" as Compo
+
+package "Application" {
+  component "Cas d'usage\nScheduleConcert\nRescheduleConcert\nCancelConcert\nPublishPlanning / UnpublishPlanning\nReportIncident\ncatalogue et requêtes" as UC
+  interface "ConcertRepository\nFestivalRepository\nStageRepository\nArtistRepository\nIncidentRepository" as RepoPort
+  interface "NotificationPort" as NotifPort
+}
+
+package "Domaine" {
+  component "Entités, objets-valeurs,\névénements" as Model
+  component "SchedulingPolicy" as Policy
+}
+
+package "Adaptateurs sortants" {
+  component "Repositories SQLAlchemy\n+ modèles ORM" as Sql
+  component "EmailNotifier\n+ email_sender" as Mail
+}
+
+database "SQLite" as DB
+
+Client --> Routers
+Handlers ..> Routers : erreurs
+Routers --> UC
+UC --> RepoPort
+UC --> NotifPort
+UC --> Policy
+UC --> Model
+Policy --> Model
+Sql ..|> RepoPort
+Mail ..|> NotifPort
+Sql --> DB
+Compo ..> Routers : injecte les cas d'usage
+Compo ..> Sql : crée
+Compo ..> Mail : crée
+@enduml
